@@ -1,22 +1,18 @@
-import streamlit as st # this is for the interface
-from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain 
-from langchain.document_loaders import PyPDFLoader
-from langchain.text_splitter import CharacterTextSplitter 
-from langchain.embedding import OpenAIEmbeddings
-from langchain.vectorstore import FAISS
-from langchain.memory import ConversationBufferMemory
-import os 
-from dotenv import load_dotenv
-import warnings
+import streamlit as st
+import os
 import tempfile
-import openai
+import warnings
+from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import FAISS
+from langchain_text_splitters import CharacterTextSplitter
+from langchain.chains.conversational_retrieval.base import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 
 warnings.filterwarnings("ignore")
-
 load_dotenv()
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 st.set_page_config(page_title="Chat with your PDF", layout="wide")
 st.title("Chat with your Mutual Fund Documents using LangChain and StreamLit")
@@ -36,13 +32,13 @@ if uploaded_file is not None:
     text_splitter = CharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200)
     docs = text_splitter.split_documents(pages)
 
-    embeddings = OpenAIEmbeddings()
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore = FAISS.from_documents(docs, embeddings)
 
     memory = ConversationBufferMemory(memory_key = "chat_history", return_messages = True)
 
     chain = ConversationalRetrievalChain.from_llm(
-        llm = ChatOpenAI(model_name = "gpt-40"),
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY")),
         retriever = vectorstore.as_retriever(),
         memory = memory
     )
