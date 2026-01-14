@@ -26,7 +26,7 @@ uploaded_file = st.file_uploader("Upload a PDF", type = ["pdf"])
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False,suffix = ".pdf") as tmp_file:
         tmp_file.write(uploaded_file.read())
-        tmp_path = tmp_file.NamedTemporaryFile
+        tmp_path = tmp_file.name
     
     st.success("PDF uploaded Successfully!")
 
