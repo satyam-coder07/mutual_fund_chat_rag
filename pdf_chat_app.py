@@ -1,9 +1,8 @@
-import streamlit as st
 import os
 import tempfile
 import warnings
+import streamlit as st
 from dotenv import load_dotenv
-
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
@@ -12,6 +11,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains.retrieval import create_retrieval_chain
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.documents import Document
+
+# New imports for OCR
+from pdf2image import convert_from_path
+import pytesseract
 
 warnings.filterwarnings("ignore")
 load_dotenv()
@@ -19,19 +23,33 @@ load_dotenv()
 st.set_page_config(page_title="Chat with your PDF", layout="wide")
 st.title("Chat with your Mutual Fund Documents using LangChain and StreamLit")
 
-uploaded_file = st.file_uploader("Upload a PDF", type = ["pdf"])
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False,suffix = ".pdf") as tmp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
         tmp_file.write(uploaded_file.read())
         tmp_path = tmp_file.name
-    
+
     st.success("PDF uploaded Successfully!")
 
+    # 1. Try standard text extraction
     loader = PyPDFLoader(tmp_path)
     pages = loader.load_and_split()
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap = 200)
+    # Check if text was actually extracted
+    extracted_text = "".join([page.page_content for page in pages]).strip()
+
+    # 2. If no text was found, it's likely a scanned image. Run OCR.
+    if not extracted_text:
+        with st.spinner("Scanned PDF detected. Running OCR to extract text (this may take a moment)..."):
+            images = convert_from_path(tmp_path)
+            pages = []
+            for i, image in enumerate(images):
+                text = pytesseract.image_to_string(image)
+                pages.append(Document(page_content=text, metadata={"source": tmp_path, "page": i}))
+
+    # Now split the documents (whether from standard load or OCR)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     docs = text_splitter.split_documents(pages)
 
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -44,13 +62,14 @@ if uploaded_file is not None:
         "\n\n"
         "{context}"
     )
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
         ("human", "{input}"),
     ])
 
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
-    
+
     question_answer_chain = create_stuff_documents_chain(llm, prompt)
     rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
@@ -58,10 +77,10 @@ if uploaded_file is not None:
         st.session_state.chat_history = []
 
     query = st.text_input("Ask a question about your PDF:")
-
     if query:
         result = rag_chain.invoke({"input": query})
         response = result["answer"]
+
         st.session_state.chat_history.append(("You", query))
         st.session_state.chat_history.append(("AI", response))
 
