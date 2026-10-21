@@ -11,3 +11,5 @@ python-dotenv==1.2.1
 numpy<2.0.0
 packaging<24
 tenacity<9
+pdf2image
+pytesseract
